@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore, type Theme } from '@renderer/stores/settings'
 
 const props = defineProps<{
@@ -16,8 +16,105 @@ const activeTab = ref('theme')
 
 const tabs = [
     { id: 'theme', name: '主题设置', icon: '🎨' },
-    { id: 'lyrics', name: '歌词设置', icon: '🎵' }
+    { id: 'lyrics', name: '歌词设置', icon: '🎵' },
+    { id: 'about', name: '关于软件', icon: 'ℹ️' }
 ]
+
+const currentVersion = ref('')
+const latestVersion = ref('')
+const updateStatus = ref('')
+const updateProgress = ref(0)
+const showUpdateDialog = ref(false)
+const updateMessage = ref('')
+const newVersion = ref('')
+
+const getAppVersion = () => {
+    const version = (window as any).electron?.process?.versions?.app || '1.0.0'
+    return version
+}
+
+const checkForUpdates = async () => {
+    try {
+        updateStatus.value = '正在检查更新...'
+        currentVersion.value = getAppVersion()
+
+        const result = await (window as any).api?.autoUpdate?.check()
+
+        if (result?.success) {
+            setTimeout(() => {
+                updateStatus.value = ''
+            }, 3000)
+        }
+    } catch (error) {
+        updateStatus.value = '检查更新失败'
+        setTimeout(() => {
+            updateStatus.value = ''
+        }, 3000)
+    }
+}
+
+const handleUpdateStatus = (status: any) => {
+    updateStatus.value = status.message || ''
+    updateProgress.value = status.progress || 0
+
+    if (status.status === 'available') {
+        newVersion.value = status.version || ''
+        updateMessage.value = `发现新版本 ${status.version}，是否立即更新？`
+        showUpdateDialog.value = true
+    } else if (status.status === 'downloaded') {
+        updateMessage.value = '更新已下载完成，是否立即安装？'
+        showUpdateDialog.value = true
+    } else if (status.status === 'not-available') {
+        updateStatus.value = '当前已是最新版本'
+        setTimeout(() => {
+            updateStatus.value = ''
+        }, 3000)
+    } else if (status.status === 'error') {
+        updateStatus.value = '更新失败'
+        setTimeout(() => {
+            updateStatus.value = ''
+        }, 3000)
+    }
+}
+
+const downloadUpdate = async () => {
+    try {
+        updateStatus.value = '正在下载更新...'
+        showUpdateDialog.value = false
+        await (window as any).api?.autoUpdate?.download()
+    } catch (error) {
+        updateStatus.value = '下载失败'
+        setTimeout(() => {
+            updateStatus.value = ''
+        }, 3000)
+    }
+}
+
+const installUpdate = async () => {
+    try {
+        showUpdateDialog.value = false
+        await (window as any).api?.autoUpdate?.install()
+    } catch (error) {
+        updateStatus.value = '安装失败'
+    }
+}
+
+const skipUpdate = () => {
+    showUpdateDialog.value = false
+}
+
+const openProjectPage = () => {
+    ;(window as any).api?.shell?.openExternal('https://github.com/zlxz2023/ZLIX')
+}
+
+onMounted(() => {
+    currentVersion.value = getAppVersion()
+    ;(window as any).api?.autoUpdate?.onStatus(handleUpdateStatus)
+})
+
+onUnmounted(() => {
+    ;(window as any).api?.autoUpdate?.offStatus()
+})
 
 const themeOptions: { value: Theme; label: string; desc: string }[] = [
     { value: 'light', label: '浅色', desc: '明亮清爽的浅色主题' },
@@ -172,7 +269,96 @@ const close = () => {
                             />
                         </div>
                     </div>
+
+                    <!-- 关于软件 -->
+                    <div v-if="activeTab === 'about'" class="settings-section">
+                        <h3>关于 ZLIX</h3>
+
+                        <div class="about-info">
+                            <div class="app-logo">
+                                <img
+                                    src="@renderer/assets/icon.png"
+                                    alt="ZLIX"
+                                    width="80"
+                                    height="80"
+                                />
+                            </div>
+                            <div class="app-details">
+                                <h4>ZLIX 音乐播放器</h4>
+                                <p class="version-text">
+                                    版本 {{ currentVersion }}
+                                    <span class="check-update-link" @click="checkForUpdates"
+                                        >检查更新</span
+                                    >
+                                    <span v-if="updateStatus" class="update-status-text">{{
+                                        updateStatus
+                                    }}</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="updateProgress > 0 && updateProgress < 100"
+                            class="progress-container"
+                        >
+                            <div class="progress-bar">
+                                <div
+                                    class="progress-fill"
+                                    :style="{ width: updateProgress + '%' }"
+                                ></div>
+                            </div>
+                            <span class="progress-text">{{ updateProgress.toFixed(1) }}%</span>
+                        </div>
+
+                        <div class="about-links">
+                            <div class="link-item" @click="openProjectPage">
+                                <span class="link-icon">🔗</span>
+                                <span class="link-text">项目主页</span>
+                                <span class="link-arrow">→</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- 更新提示弹窗 -->
+                <Teleport to="body">
+                    <div
+                        v-if="showUpdateDialog"
+                        class="update-dialog-overlay"
+                        @click.self="skipUpdate"
+                    >
+                        <div class="update-dialog">
+                            <div class="dialog-header">
+                                <h3>发现新版本</h3>
+                            </div>
+                            <div class="dialog-body">
+                                <p>{{ updateMessage }}</p>
+                                <p v-if="newVersion" class="version-info">
+                                    新版本: {{ newVersion }}
+                                </p>
+                            </div>
+                            <div class="dialog-footer">
+                                <button class="dialog-btn cancel" @click="skipUpdate">
+                                    稍后更新
+                                </button>
+                                <button
+                                    class="dialog-btn confirm"
+                                    @click="
+                                        updateProgress > 0 && updateProgress < 100
+                                            ? installUpdate()
+                                            : downloadUpdate()
+                                    "
+                                >
+                                    {{
+                                        updateProgress > 0 && updateProgress < 100
+                                            ? '立即安装'
+                                            : '立即更新'
+                                    }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </Teleport>
 
                 <!-- 关闭按钮 -->
                 <button class="close-btn" @click="close">✕</button>
@@ -593,5 +779,339 @@ html:not([data-theme='light']) .setting-sub-label {
 .close-btn:hover {
     background-color: #f0f0f0;
     color: #333;
+}
+
+.about-info {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+    padding: 24px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+}
+
+html:not([data-theme='light']) .about-info {
+    background: #252545;
+    border-color: #3a3a5a;
+}
+
+.app-logo img {
+    width: 80px;
+    height: 80px;
+    border-radius: 16px;
+    object-fit: cover;
+}
+
+html:not([data-theme='light']) .app-logo img {
+    background: #ffffff;
+}
+
+.app-details h4 {
+    margin: 0 0 8px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+}
+
+html:not([data-theme='light']) .app-details h4 {
+    color: #ffffff;
+}
+
+.version-text {
+    margin: 0;
+    font-size: 14px;
+    color: #999;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+html:not([data-theme='light']) .version-text {
+    color: #9ca3af;
+}
+
+.check-update-link {
+    font-size: 12px;
+    color: #ff3355;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 51, 85, 0.1);
+    transition: all 0.2s;
+}
+
+.check-update-link:hover {
+    background: rgba(255, 51, 85, 0.2);
+}
+
+.update-status-text {
+    font-size: 12px;
+    color: #67c23a;
+    margin-left: 4px;
+}
+
+html:not([data-theme='light']) .update-status-text {
+    color: #85ce61;
+}
+
+.about-actions {
+    margin-bottom: 24px;
+}
+
+.action-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.about-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: #ff3355;
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.about-btn:hover {
+    background: #e6294d;
+    transform: translateY(-1px);
+}
+
+.about-btn:active {
+    transform: translateY(0);
+}
+
+.btn-icon {
+    font-size: 16px;
+}
+
+.update-status {
+    font-size: 14px;
+    color: #666;
+}
+
+html:not([data-theme='light']) .update-status {
+    color: #9ca3af;
+}
+
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: #ffffff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+html:not([data-theme='light']) .progress-container {
+    background: #252545;
+    border-color: #3a3a5a;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+html:not([data-theme='light']) .progress-bar {
+    background: #3a3a5a;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #ff3355, #ff6699);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ff3355;
+    min-width: 50px;
+    text-align: right;
+}
+
+.about-links {
+    margin-bottom: 24px;
+}
+
+.link-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+html:not([data-theme='light']) .link-item {
+    background: #252545;
+    border-color: #3a3a5a;
+}
+
+.link-item:hover {
+    border-color: #ff3355;
+    background: #fff5f7;
+}
+
+html:not([data-theme='light']) .link-item:hover {
+    background: rgba(255, 51, 85, 0.1);
+}
+
+.link-icon {
+    font-size: 18px;
+}
+
+.link-text {
+    flex: 1;
+    font-size: 14px;
+    color: #333;
+}
+
+html:not([data-theme='light']) .link-text {
+    color: #ffffff;
+}
+
+.link-arrow {
+    font-size: 16px;
+    color: #999;
+}
+
+.about-desc {
+    text-align: center;
+    padding: 20px;
+    color: #999;
+    font-size: 13px;
+}
+
+html:not([data-theme='light']) .about-desc {
+    color: #9ca3af;
+}
+
+.about-desc p {
+    margin: 0 0 8px 0;
+}
+
+.copyright {
+    margin-top: 12px;
+    opacity: 0.7;
+}
+
+.update-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.update-dialog {
+    width: 400px;
+    background: #ffffff;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+html:not([data-theme='light']) .update-dialog {
+    background: #1a1a2e;
+}
+
+.dialog-header {
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #ff3355, #ff6699);
+    color: #ffffff;
+}
+
+.dialog-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.dialog-body {
+    padding: 24px;
+}
+
+.dialog-body p {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #333;
+}
+
+html:not([data-theme='light']) .dialog-body p {
+    color: #ffffff;
+}
+
+.version-info {
+    font-size: 13px;
+    color: #ff3355;
+    font-weight: 500;
+}
+
+.dialog-footer {
+    padding: 16px 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.dialog-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.dialog-btn.cancel {
+    background: #f0f0f0;
+    color: #666;
+}
+
+html:not([data-theme='light']) .dialog-btn.cancel {
+    background: #252545;
+    color: #9ca3af;
+}
+
+.dialog-btn.cancel:hover {
+    background: #e0e0e0;
+}
+
+html:not([data-theme='light']) .dialog-btn.cancel:hover {
+    background: #3a3a5a;
+}
+
+.dialog-btn.confirm {
+    background: #ff3355;
+    color: #ffffff;
+}
+
+.dialog-btn.confirm:hover {
+    background: #e6294d;
 }
 </style>

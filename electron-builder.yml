@@ -41,7 +41,7 @@ appImage:
 npmRebuild: false
 publish:
   provider: github
-  owner: zxlz2023
+  owner: zlxz2023
   repo: ZLIX
   releaseType: release
 electronDownload:

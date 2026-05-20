@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { shell } from 'electron'
 
 interface UpdateStatus {
   status: 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
@@ -121,8 +122,8 @@ const api = {
       ipcRenderer.removeAllListeners('auto-update:status')
     }
   },
-  app: {
-    getVersion: () => ipcRenderer.invoke('app:get-version')
+  shell: {
+    openExternal: (url: string) => shell.openExternal(url)
   }
 }
 

@@ -13,6 +13,7 @@ export interface UpdateStatus {
 export function initAutoUpdater(window: BrowserWindow): void {
     mainWindow = window
 
+    autoUpdater.forceDevUpdateConfig = true
     autoUpdater.autoDownload = false
 
     autoUpdater.on('checking-for-update', () => {
@@ -94,7 +95,7 @@ function sendStatus(status: UpdateStatus): void {
 export function checkForUpdatesOnStartup(): void {
     if (process.env.NODE_ENV !== 'development') {
         setTimeout(() => {
-            autoUpdater.checkForUpdates().catch(() => {})
+            autoUpdater.checkForUpdates().catch(() => { })
         }, 5000)
     }
 }

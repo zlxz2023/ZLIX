@@ -71,15 +71,15 @@ export interface UpdateStatus {
 }
 
 export interface AutoUpdateAPI {
-    check: () => Promise<{ success: boolean; error?: string }>
-    download: () => Promise<{ success: boolean; error?: string }>
-    install: () => Promise<{ success: boolean; error?: string }>
-    onStatus: (callback: (status: UpdateStatus) => void) => void
-    offStatus: () => void
+  check: () => Promise<{ success: boolean; error?: string }>
+  download: () => Promise<{ success: boolean; error?: string }>
+  install: () => Promise<{ success: boolean; error?: string }>
+  onStatus: (callback: (status: UpdateStatus) => void) => void
+  offStatus: () => void
 }
 
-export interface AppAPI {
-    getVersion: () => Promise<string>
+export interface ShellAPI {
+  openExternal: (url: string) => void
 }
 
 export interface RequestConfig {
@@ -108,6 +108,7 @@ declare global {
             mainWindow: MainWindowAPI
             lyricsWindow: LyricsWindowAPI
             autoUpdate: AutoUpdateAPI
+            shell: ShellAPI
         }
     }
 }
