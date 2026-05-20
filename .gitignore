@@ -1,0 +1,12 @@
+# 排除 mpv 播放器
+build/mpv/
+
+# 排除 API server 的 node_modules
+src/api-server/kugou/node_modules
+
+# 排除其他
+node_modules
+dist
+out
+.DS_Store
+*.log*
