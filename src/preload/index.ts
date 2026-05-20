@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+interface UpdateStatus {
+  status: 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'
+  message?: string
+  progress?: number
+  version?: string
+}
+
 const callbackMap = new WeakMap<(...args: any[]) => void, (...args: any[]) => void>()
 
 const api = {
@@ -102,6 +109,20 @@ const api = {
     onSettingsUpdate: (callback: (settings: any) => void) => {
       ipcRenderer.on('settings:update', (_, settings) => callback(settings))
     }
+  },
+  autoUpdate: {
+    check: () => ipcRenderer.invoke('auto-update:check'),
+    download: () => ipcRenderer.invoke('auto-update:download'),
+    install: () => ipcRenderer.invoke('auto-update:install'),
+    onStatus: (callback: (status: UpdateStatus) => void) => {
+      ipcRenderer.on('auto-update:status', (_, status) => callback(status))
+    },
+    offStatus: () => {
+      ipcRenderer.removeAllListeners('auto-update:status')
+    }
+  },
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:get-version')
   }
 }
 

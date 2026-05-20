@@ -6,6 +6,7 @@ import initAppServer from "./server";
 import { initMpvPlayer, getMpvController, destroyMpvPlayer } from './mpv'
 import { initKugouServer, registerKugouApiIpcHandler } from './kugou-server'
 import initRendererLogIpc from "./ipc-renderer-log";
+import { initAutoUpdater, checkForUpdatesOnStartup } from './auto-updater';
 
 let mainWindow: BrowserWindow | null = null
 let lyricsWindow: BrowserWindow | null = null
@@ -103,16 +104,16 @@ if (!gotTheLock) {
             optimizer.watchWindowShortcuts(window)
         })
 
-        
+
 
         // 日志 IPC 处理
 
         createWindow()
 
-        // 初始化 mpv 播放器
-    await initMpvPlayer(() => mainWindow, () => lyricsWindow)
+        initAutoUpdater(mainWindow!)
+        checkForUpdatesOnStartup()
 
-        // 播放器控制 IPC
+        // 播放器控制 IPC (先注册 handlers，避免 renderer 在 mpv 初始化前调用失败)
         ipcMain.handle('mpv:load', async (_, url: string) => {
             const controller = getMpvController()
             if (!controller) return { success: false, error: 'mpv not initialized' }
@@ -124,68 +125,72 @@ if (!gotTheLock) {
             }
         })
 
-    ipcMain.handle('mpv:play', async () => {
-        const controller = getMpvController()
-        if (!controller) return { success: false, error: 'mpv not initialized' }
-        try {
-            await controller.play()
-            return { success: true }
-        } catch (e) {
-            return { success: false, error: String(e) }
-        }
-    })
+        ipcMain.handle('mpv:play', async () => {
+            const controller = getMpvController()
+            if (!controller) return { success: false, error: 'mpv not initialized' }
+            try {
+                await controller.play()
+                return { success: true }
+            } catch (e) {
+                return { success: false, error: String(e) }
+            }
+        })
 
-    ipcMain.handle('mpv:pause', async () => {
-        const controller = getMpvController()
-        if (!controller) return { success: false, error: 'mpv not initialized' }
-        try {
-            await controller.pause()
-            return { success: true }
-        } catch (e) {
-            return { success: false, error: String(e) }
-        }
-    })
+        ipcMain.handle('mpv:pause', async () => {
+            const controller = getMpvController()
+            if (!controller) return { success: false, error: 'mpv not initialized' }
+            try {
+                await controller.pause()
+                return { success: true }
+            } catch (e) {
+                return { success: false, error: String(e) }
+            }
+        })
 
-    ipcMain.handle('mpv:stop', async () => {
-        const controller = getMpvController()
-        if (!controller) return { success: false, error: 'mpv not initialized' }
-        try {
-            await controller.stop()
-            return { success: true }
-        } catch (e) {
-            return { success: false, error: String(e) }
-        }
-    })
+        ipcMain.handle('mpv:stop', async () => {
+            const controller = getMpvController()
+            if (!controller) return { success: false, error: 'mpv not initialized' }
+            try {
+                await controller.stop()
+                return { success: true }
+            } catch (e) {
+                return { success: false, error: String(e) }
+            }
+        })
 
-    ipcMain.handle('mpv:seek', async (_, time: number) => {
-        const controller = getMpvController()
-        if (!controller) return { success: false, error: 'mpv not initialized' }
-        try {
-            await controller.seek(time)
-            return { success: true }
-        } catch (e) {
-            return { success: false, error: String(e) }
-        }
-    })
+        ipcMain.handle('mpv:seek', async (_, time: number) => {
+            const controller = getMpvController()
+            if (!controller) return { success: false, error: 'mpv not initialized' }
+            try {
+                await controller.seek(time)
+                return { success: true }
+            } catch (e) {
+                return { success: false, error: String(e) }
+            }
+        })
 
-    ipcMain.handle('mpv:setVolume', async (_, volume: number) => {
-        const controller = getMpvController()
-        if (!controller) return { success: false, error: 'mpv not initialized' }
-        try {
-            await controller.setVolume(volume)
-            return { success: true }
-        } catch (e) {
-            return { success: false, error: String(e) }
-        }
-    })
+        ipcMain.handle('mpv:setVolume', async (_, volume: number) => {
+            const controller = getMpvController()
+            if (!controller) return { success: false, error: 'mpv not initialized' }
+            try {
+                await controller.setVolume(volume)
+                return { success: true }
+            } catch (e) {
+                return { success: false, error: String(e) }
+            }
+        })
 
-    ipcMain.handle('mpv:getState', async () => {
-        const controller = getMpvController()
-        if (!controller) return null
-        return controller.currentState
-    })
+        ipcMain.handle('mpv:getState', async () => {
+            const controller = getMpvController()
+            if (!controller) return null
+            return controller.currentState
+        })
 
-    app.on('activate', function () {
+        // 初始化 mpv 播放器
+        await initMpvPlayer(() => mainWindow, () => lyricsWindow)
+
+
+        app.on('activate', function () {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.
             if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -241,7 +246,7 @@ function createLyricsWindow(): void {
     const { screen } = require('electron')
     const primaryDisplay = screen.getPrimaryDisplay()
     const { width: screenWidth, height: _screenHeight } = primaryDisplay.workAreaSize
-    
+
     // 桌面歌词默认位置：顶部中间
     const lyricsWidth = 600
     const lyricsHeight = 150
@@ -414,14 +419,14 @@ ipcMain.on('player:control', (_, action: string) => {
 
 // 歌词窗口播放控制
 ipcMain.on('lyrics:playPrev', () => {
-  mainWindow?.webContents.send('lyrics:playPrev')
+    mainWindow?.webContents.send('lyrics:playPrev')
 })
 
 ipcMain.on('lyrics:playNext', () => {
-  mainWindow?.webContents.send('lyrics:playNext')
+    mainWindow?.webContents.send('lyrics:playNext')
 })
 
 // 歌词窗口请求数据
 ipcMain.on('lyrics-window:request-data', () => {
-  mainWindow?.webContents.send('lyrics-window:request-data')
+    mainWindow?.webContents.send('lyrics-window:request-data')
 })

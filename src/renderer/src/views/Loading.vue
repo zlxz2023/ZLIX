@@ -18,6 +18,8 @@ const navigateToHome = () => {
 
 const initializeApp = async () => {
     try {
+        hasError.value = false
+        errorDetail.value = ''
         statusMessage.value = '正在初始化设置系统'
         await new Promise((resolve) => setTimeout(resolve, 200))
 
@@ -26,8 +28,22 @@ const initializeApp = async () => {
         if (!api || !api.mpv) {
             throw new Error('MPV 播放器接口不可用')
         }
-        const mpvState = await api.mpv.getState()
-        if (mpvState === null) {
+        // 等待 mpv 就绪，最多重试 3 次（每次 200ms）以避免 race condition
+        let mpvState = null
+        const maxAttempts = 3
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                // 若 handler 尚未注册或 mpv 未初始化，getState 可能返回 null 或抛错
+                // 捕获异常并重试
+                // @ts-ignore
+                mpvState = await api.mpv.getState()
+                if (mpvState !== null && mpvState !== undefined) break
+            } catch (e) {
+                // ignore and retry
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200))
+        }
+        if (mpvState === null || mpvState === undefined) {
             throw new Error('MPV 播放器初始化失败：无法连接音频播放器')
         }
         await new Promise((resolve) => setTimeout(resolve, 400))
